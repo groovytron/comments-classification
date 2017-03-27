@@ -18,5 +18,5 @@ def preprocess_file(file_name):
 
 
 if __name__ == '__main__':
-   file_canonical_words = preprocess_file('data/tagged/neg/neg-0000.txt')
-   print(file_canonical_words)
+    file_canonical_words = preprocess_file('data/tagged/neg/neg-0000.txt')
+    print(file_canonical_words)

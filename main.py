@@ -12,7 +12,7 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report, confusion_matrix
 
-PATTERN = re.compile('(ADV|NOM|VER|ADJ)')
+PATTERNS = ('ADV', 'NOM', 'VER', 'ADJ')
 NEG_PATTERN = re.compile('^neg')
 TOPDIRS_TO_CREATE = ['train', 'test']
 SUBDIRS_TO_CREATE = ['pos', 'neg']
@@ -28,11 +28,11 @@ TAGGED_DIRS = [
 
 
 def preprocess_file_words(file_name):
-    with open(file_name, 'r') as f:
+    with open(file_name, 'r', encoding='utf-8') as f:
         for line in f:
             try:
                 _, nature, canonical_form = tuple(line.split(maxsplit=3))
-                if PATTERN.match(nature):
+                if nature in PATTERNS:
                     yield canonical_form
             except ValueError:
                 continue
@@ -59,7 +59,7 @@ def get_file_path(file_name, pos_neg_paths):
 
 
 def write_words_in_file(file_name, words):
-    with open(file_name, 'w') as f:
+    with open(file_name, 'w', encoding='utf-8') as f:
         f.write(' '.join(words))
 
 
@@ -107,7 +107,14 @@ def print_classification_report(classifier,
     print()
 
 
-if __name__ == '__main__':
+def main():
+    """
+        NAME
+            Movie reviews classifier : Classifies movie reviews using naive bayesian and linear claassifiers.
+        SYNOPSIS
+            python main.py
+        PARAMETERS
+    """
     create_scikit_datasets()
     categories = ['train']
 
@@ -116,18 +123,10 @@ if __name__ == '__main__':
     validation_dataset = sklearn.datasets.load_files(
         './test', encoding='utf-8')
 
-    # Vectorisation
-    count_vect = CountVectorizer()
-    X_train_counts = count_vect.fit_transform(training_dataset.data)
-
-    # Indexation
-    tfidf_transformer = TfidfTransformer()
-    X_train_tfidf = tfidf_transformer.fit_transform(X_train_counts)
-    X_train_tfidf.shape
-
+    # Create pipelines for classifiers
     naive_bayes_classifier = Pipeline([
-        ('vect', CountVectorizer()),
-        ('tfidf', TfidfTransformer()),
+        ('vect', CountVectorizer()),  # Vectorisation
+        ('tfidf', TfidfTransformer()),  # Indexation
         ('clf', MultinomialNB()),
     ])
     linear_classifier = Pipeline([
@@ -173,3 +172,7 @@ if __name__ == '__main__':
 
     for param_name in sorted(parameters.keys()):
         print("\t%s: %r" % (param_name, gs_clf.best_params_[param_name]))
+
+
+if __name__ == '__main__':
+    main()

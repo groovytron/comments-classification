@@ -54,7 +54,7 @@ def write_words_in_file(file_name, words):
         f.write(' '.join(words))
 
 
-if __name__ == '__main__':
+def create_scikit_datasets():
     create_dirs()
     file_paths = [
         get_file_path(file_name, TAGGED_DIRS)
@@ -64,7 +64,6 @@ if __name__ == '__main__':
     test_files = [
         file_name for file_name in file_paths if file_name not in train_files
     ]
-    print(DIRS_TO_CREATE)
     for f in file_paths:
         destination_folders = []
         file_name = os.path.basename(f)
@@ -74,3 +73,6 @@ if __name__ == '__main__':
                                                  -2:]
         destination_path = get_file_path(file_name, destination_folders)
         write_words_in_file(destination_path, canonical_words)
+
+if __name__ == '__main__':
+    create_scikit_datasets()

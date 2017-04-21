@@ -3,88 +3,79 @@ import os
 import itertools
 import random
 import csv
+import shutil
 import numpy as np
+from pathlib import Path
 import sklearn
-import sklearn.datasets
+from sklearn.datasets import load_files
 from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import SGDClassifier
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 
-PATTERNS = ('ADV', 'NOM', 'VER', 'ADJ')
-NEG_PATTERN = re.compile('^neg')
-TOPDIRS_TO_CREATE = ['train', 'test']
-SUBDIRS_TO_CREATE = ['pos', 'neg']
-DIRS_TO_CREATE = [
-    '/'.join(dirs)
-    for dirs in list(itertools.product(TOPDIRS_TO_CREATE, SUBDIRS_TO_CREATE))
-]
-WORKING_DIR = ['data/tagged']
-TAGGED_DIRS = [
-    '/'.join(dirs)
-    for dirs in list(itertools.product(WORKING_DIR, SUBDIRS_TO_CREATE))
-]
+nature_patterns = 'ADV', 'NOM', 'VER', 'ADJ'
+
+# Directories path
+source = Path('data/tagged')
+
+working = Path('working')
+train = working / Path('train')
+test = working / Path('test')
+
+categories = 'pos', 'neg'
+negative = Path('neg')
+positive = Path('pos')
 
 
-def preprocess_file_words(file_name):
-    with open(file_name, 'r', encoding='utf-8') as f:
+def read_canonical_words(file_name):
+    with open(file_name, 'r', encoding='utf-8', newline='') as f:
         reader = csv.reader(f, delimiter='\t')
         for line in reader:
             try:
                 _, nature, canonical_form = tuple(line)
-                if nature in PATTERNS:
+                if nature in nature_patterns:
                     yield canonical_form
             except ValueError:
-                continue
+                pass
 
 
-def create_dirs():
-    for directory in DIRS_TO_CREATE:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-        for file_to_delete in os.listdir(directory):
-            os.remove('/'.join([directory, file_to_delete]))
-
-
-def get_files_names():
-    return list(
-        itertools.chain.from_iterable([os.listdir(dir)
-                                       for dir in TAGGED_DIRS]))
-
-
-def get_file_path(file_name, pos_neg_paths):
-    directory = pos_neg_paths[1] if (
-        NEG_PATTERN.match(file_name)) else pos_neg_paths[0]
-    return '/'.join([directory, file_name])
-
-
-def write_words_in_file(file_name, words):
+def write_words(file_name, words):
     with open(file_name, 'w', encoding='utf-8') as f:
         f.write(' '.join(words))
 
 
-def create_scikit_datasets():
-    create_dirs()
-    file_paths = set(
-        get_file_path(file_name, TAGGED_DIRS)
-        for file_name in get_files_names())
-    train_files = set(random.sample(file_paths, int(0.8 * len(file_paths))))
-    test_files = file_paths - train_files
+def create_datasets(train_size):
+    """Create datasets following the given train_size"""
+    # Create datasets directories
+    if working.exists():
+        shutil.rmtree(working)
+    working.mkdir(exist_ok=True)
 
-    for f in file_paths:
-        destination_folders = []
-        file_name = os.path.basename(f)
-        canonical_words = tuple(preprocess_file_words(f))
+    for directory in (train, test):
+        directory.mkdir(exist_ok=True)
+        for subdirectory in (negative, positive):
+            subsubdir = directory / subdirectory
+            subsubdir.mkdir(exist_ok=True)
 
-        if f in train_files:
-            destination_folders = DIRS_TO_CREATE[:2]
-        else:
-            destination_folders = DIRS_TO_CREATE[-2:]
+    # Create datasets and copy files in their corresponding datasets
+    negative_comments = list((source / negative).glob('*.txt'))
+    positive_comments = list((source / positive).glob('*.txt'))
 
-        destination_path = get_file_path(file_name, destination_folders)
-        write_words_in_file(destination_path, canonical_words)
+    # Split training and validation datasets so that we have as many
+    # positive reviews as negative ones in both training and validation
+    # datasets.
+    neg_train, neg_test, pos_train, pos_test = train_test_split(
+        negative_comments, positive_comments, train_size=train_size)
+    # Create a list of files (source_path, destination_path)
+    files = ((neg_train, train / negative), (neg_test, test / negative),
+             (pos_train, train / positive), (pos_test, test / positive))
+    # Process files and store their canonical words'
+    for files, destination in files:
+        for file in files:
+            words = tuple(read_canonical_words(file))
+            write_words(destination / Path(file.name), words)
 
 
 def print_classification_report(classifier,
@@ -116,42 +107,37 @@ def main():
             python main.py
         PARAMETERS
     """
-    create_scikit_datasets()
-    categories = ['train']
-
-    # Load training and validation datasets
-    training_dataset = sklearn.datasets.load_files('./train', encoding='utf-8')
-    validation_dataset = sklearn.datasets.load_files(
-        './test', encoding='utf-8')
+    create_datasets(0.8)
+    dataset_training = load_files(
+        train, categories=categories, encoding="utf-8")
+    dataset_validation = load_files(
+        test, categories=categories, encoding="utf-8")
 
     # Create pipelines for classifiers
-    naive_bayes_classifier = Pipeline([
-        ('vect', CountVectorizer()),  # Vectorisation
-        ('tfidf', TfidfTransformer()),  # Indexation
-        ('clf', MultinomialNB()),
-    ])
-    linear_classifier = Pipeline([
-        ('vect', CountVectorizer()),
-        ('tfidf', TfidfTransformer()),
-        ('clf', SGDClassifier(
-            loss='hinge', penalty='l2', alpha=1e-3, n_iter=5,
-            random_state=42)),
-    ])
-
-    naive_bayes_classifier.fit(training_dataset.data, training_dataset.target)
-    linear_classifier.fit(training_dataset.data, training_dataset.target)
-
-    # Test naive bayesian classifier
-    naive_bayes_predicted = naive_bayes_classifier.predict(
-        validation_dataset.data)
-    linear_predicted = linear_classifier.predict(validation_dataset.data)
-
-    # print('Prediction for the naive bayesian classifier: {0}'.format(
-    #     np.mean(naive_bayes_predicted == validation_dataset.target)))
-    print_classification_report(naive_bayes_classifier, naive_bayes_predicted,
-                                validation_dataset, 'Naive bayesian')
-    print_classification_report(linear_classifier, linear_predicted,
-                                validation_dataset, 'Linear')
+    pipelines = (
+        (
+            'naive bayesian',
+            Pipeline([
+                ('vect', CountVectorizer()),  # Vectorisation
+                ('tfidf', TfidfTransformer()),  # Indexation
+                ('clf', MultinomialNB()),
+            ])),
+        ('linear', Pipeline([
+            ('vect', CountVectorizer()),
+            ('tfidf', TfidfTransformer()),
+            ('clf', SGDClassifier(
+                loss='hinge',
+                penalty='l2',
+                alpha=1e-3,
+                n_iter=5,
+                random_state=42)),
+        ])))
+    # Test each pipeline with its classifier
+    for pipe_name, pipe in pipelines:
+        pipe.fit(dataset_training.data, dataset_training.target)  #
+        predicted = pipe.predict(dataset_validation.data)
+        print_classification_report(pipe, predicted, dataset_validation,
+                                    pipe_name)
 
     # Set parameters for GridSearchCV
     parameters = {
@@ -162,11 +148,12 @@ def main():
 
     print('Searching for the best SVM parameters (it might take a while).')
 
+    _, linear_classifier = pipelines[1]
     gs_clf = GridSearchCV(
         linear_classifier, parameters, n_jobs=-1)  # Use all cores
 
     # Try fit on a subset of data
-    gs_clf = gs_clf.fit(training_dataset.data, training_dataset.target)
+    gs_clf = gs_clf.fit(dataset_training.data, dataset_training.target)
 
     print('SVM classifier is known to work better with the following',
           'found parameters:')

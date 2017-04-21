@@ -41,7 +41,7 @@ def preprocess_file_words(file_name):
 def create_dirs():
     for directory in DIRS_TO_CREATE:
         if not os.path.exists(directory):
-            os.makedirs(dir_to_create)
+            os.makedirs(directory)
         for file_to_delete in os.listdir(directory):
             os.remove('/'.join([directory, file_to_delete]))
 

@@ -37,7 +37,7 @@ def preprocess_file_words(file_name):
                 if nature in PATTERNS:
                     yield canonical_form
             except ValueError:
-                continue
+                pass
 
 
 def create_dirs():
@@ -89,21 +89,20 @@ def create_scikit_datasets():
 
 def print_classification_report(classifier,
                                 predicted,
-                                validation_dataset,
+                                dataset_test,
                                 classifier_name=""):
     print('{0} classification report:'.format(classifier_name))
     print(
         classification_report(
-            validation_dataset.target,
+            dataset_test.target,
             predicted,
-            target_names=validation_dataset.target_names))
-    confusion_mat = confusion_matrix(validation_dataset.target, predicted)
+            target_names=dataset_test.target_names))
+    confusion_mat = confusion_matrix(dataset_test.target, predicted)
 
     print('{0} confusion matrix:'.format(classifier_name))
-    print('{:>5}  {:>5}  {:>5}'.format('', *validation_dataset.target_names))
+    print('{:>5}  {:>5}  {:>5}'.format('', *dataset_test.target_names))
     for i, row in enumerate(confusion_mat.tolist()):
-        print('{:>5}  {:>5}  {:>5}'.format(validation_dataset.target_names[i],
-                                           *row))
+        print('{:>5}  {:>5}  {:>5}'.format(dataset_test.target_names[i], *row))
     print()
 
 
@@ -120,38 +119,34 @@ def main():
     categories = ['train']
 
     # Load training and validation datasets
-    training_dataset = sklearn.datasets.load_files('./train', encoding='utf-8')
-    validation_dataset = sklearn.datasets.load_files(
-        './test', encoding='utf-8')
+    dataset_train = sklearn.datasets.load_files('./train', encoding='utf-8')
+    dataset_test = sklearn.datasets.load_files('./test', encoding='utf-8')
 
     # Create pipelines for classifiers
-    naive_bayes_classifier = Pipeline([
-        ('vect', CountVectorizer()),  # Vectorisation
-        ('tfidf', TfidfTransformer()),  # Indexation
-        ('clf', MultinomialNB()),
-    ])
-    linear_classifier = Pipeline([
-        ('vect', CountVectorizer()),
-        ('tfidf', TfidfTransformer()),
-        ('clf', SGDClassifier(
-            loss='hinge', penalty='l2', alpha=1e-3, n_iter=5,
-            random_state=42)),
-    ])
+    pipelines = (
+        (
+            'bayes',
+            Pipeline([
+                ('vect', CountVectorizer()),  # Vectorisation
+                ('tfidf', TfidfTransformer()),  # Indexation
+                ('clf', MultinomialNB()),
+            ])),
+        ('linear', Pipeline([
+            ('vect', CountVectorizer()),
+            ('tfidf', TfidfTransformer()),
+            ('clf', SGDClassifier(
+                loss='hinge',
+                penalty='l2',
+                alpha=1e-3,
+                n_iter=5,
+                random_state=42)),
+        ])))
 
-    naive_bayes_classifier.fit(training_dataset.data, training_dataset.target)
-    linear_classifier.fit(training_dataset.data, training_dataset.target)
-
-    # Test naive bayesian classifier
-    naive_bayes_predicted = naive_bayes_classifier.predict(
-        validation_dataset.data)
-    linear_predicted = linear_classifier.predict(validation_dataset.data)
-
-    # print('Prediction for the naive bayesian classifier: {0}'.format(
-    #     np.mean(naive_bayes_predicted == validation_dataset.target)))
-    print_classification_report(naive_bayes_classifier, naive_bayes_predicted,
-                                validation_dataset, 'Naive bayesian')
-    print_classification_report(linear_classifier, linear_predicted,
-                                validation_dataset, 'Linear')
+    # Test Bayes and Linear classifiers
+    for name, pipe in pipelines:
+        pipe.fit(dataset_train.data, dataset_train.target)
+        predicted = pipe.predict(dataset_test.data)
+        print_classification_report(pipe, predicted, dataset_test, name)
 
     # Set parameters for GridSearchCV
     parameters = {
@@ -161,12 +156,12 @@ def main():
     }
 
     print('Searching for the best SVM parameters (it might take a while).')
-
+    _, linear_classifier = pipelines[0]
     gs_clf = GridSearchCV(
         linear_classifier, parameters, n_jobs=-1)  # Use all cores
 
     # Try fit on a subset of data
-    gs_clf = gs_clf.fit(training_dataset.data, training_dataset.target)
+    gs_clf = gs_clf.fit(dataset_train.data, dataset_train.target)
 
     print('SVM classifier is known to work better with the following',
           'found parameters:')

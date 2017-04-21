@@ -2,6 +2,12 @@ import re
 import os
 import itertools
 import random
+import numpy as np
+import sklearn
+import sklearn.datasets
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import SGDClassifier
 
 PATTERN = re.compile('(ADV|NOM|VER|ADJ)')
 NEG_PATTERN = re.compile('^neg')
@@ -74,5 +80,39 @@ def create_scikit_datasets():
         destination_path = get_file_path(file_name, destination_folders)
         write_words_in_file(destination_path, canonical_words)
 
+
 if __name__ == '__main__':
     create_scikit_datasets()
+    categories = ['train']
+
+    # Load training and validation datasets
+    training_dataset = sklearn.datasets.load_files('./train', encoding='utf-8')
+    validation_dataset = sklearn.datasets.load_files(
+        './test', encoding='utf-8')
+
+    # Vectorisation
+    count_vect = CountVectorizer()
+    X_train_counts = count_vect.fit_transform(training_dataset.data)
+
+    # Indexation
+    tfidf_transformer = TfidfTransformer()
+    X_train_tfidf = tfidf_transformer.fit_transform(X_train_counts)
+    X_train_tfidf.shape
+
+    # Create and train naive bayesian classifier
+    naive_bayes_classifier = MultinomialNB().fit(X_train_tfidf,
+                                                 training_dataset.target)
+    linear_classifier = SGDClassifier(
+        loss='hinge', penalty='l2', alpha=1e-3, n_iter=5, random_state=42).fit(
+            X_train_tfidf, training_dataset.target)
+
+    X_new_counts = count_vect.transform(validation_dataset.data)
+    X_new_tfidf = tfidf_transformer.transform(X_new_counts)
+
+    # Test naive bayesian classifier
+    naive_bayes_predicted = naive_bayes_classifier.predict(X_new_tfidf)
+    linear_predicted = linear_classifier.predict(X_new_tfidf)
+    print('Result for the naive bayesian classifier: {0}'.format(
+        np.mean(naive_bayes_predicted == validation_dataset.target)))
+    print('Result for the linear classifier: {0}'.format(
+        np.mean(linear_predicted == validation_dataset.target)))

@@ -2,6 +2,7 @@ import re
 import os
 import itertools
 import random
+import csv
 import numpy as np
 import sklearn
 import sklearn.datasets
@@ -29,9 +30,10 @@ TAGGED_DIRS = [
 
 def preprocess_file_words(file_name):
     with open(file_name, 'r', encoding='utf-8') as f:
-        for line in f:
+        reader = csv.reader(f, delimiter='\t')
+        for line in reader:
             try:
-                _, nature, canonical_form = tuple(line.split(maxsplit=3))
+                _, nature, canonical_form = tuple(line)
                 if nature in PATTERNS:
                     yield canonical_form
             except ValueError:
@@ -110,7 +112,8 @@ def print_classification_report(classifier,
 def main():
     """
         NAME
-            Movie reviews classifier : Classifies movie reviews using naive bayesian and linear claassifiers.
+            Movie reviews classifier : Classifies movie reviews using naive
+                bayesian and linear claassifiers.
         SYNOPSIS
             python main.py
         PARAMETERS

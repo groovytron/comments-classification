@@ -67,14 +67,12 @@ def write_words_in_file(file_name, words):
 
 def create_scikit_datasets():
     create_dirs()
-    file_paths = [
+    file_paths = set(
         get_file_path(file_name, TAGGED_DIRS)
-        for file_name in get_files_names()
-    ]
-    train_files = random.sample(file_paths, int(0.8 * len(file_paths)))
-    test_files = [
-        file_name for file_name in file_paths if file_name not in train_files
-    ]
+        for file_name in get_files_names())
+    train_files = set(random.sample(file_paths, int(0.8 * len(file_paths))))
+    test_files = file_paths - train_files
+
     for f in file_paths:
         destination_folders = []
         file_name = os.path.basename(f)
